@@ -1,0 +1,15 @@
+{
+  "name": "notifications-serverless-function",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=receiveNotification --port 8383 --signature-type=event"
+  },
+  "author": "Milena Krawczyk",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "axios": "^1.4.0"
+  }
+}
