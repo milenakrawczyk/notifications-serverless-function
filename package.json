@@ -10,8 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "@google-cloud/functions-framework": "^3.3.0",
-    "axios": "^1.4.0",
     "knex": "^2.5.1",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "web-push": "^3.6.5"
   }
 }
