@@ -48,12 +48,11 @@ const insertNotification = async (pool, notification) => {
     }
   };
 
-const getSubscription = async (pool, accountId) => {
+const getSubscriptions = async (pool, accountId) => {
     try {
       return await pool('Subscription')
       .select('push_subscription_object')
       .where('account', accountId)
-      .first()
     } catch (err) {
       throw Error(err);
     }
@@ -74,8 +73,8 @@ functions.cloudEvent('receiveNotification', (cloudevent) => {
     createTcpPool().then((pool) => {
         const data = JSON.parse(atob(cloudevent.data.message.data));
 
-        getSubscription(pool, data.receiver).then((pso) => {
-          if (!pso) {
+        getSubscriptions(pool, data.receiver).then((subscriptions) => {
+          if (!subscriptions || subscriptions.length === 0) {
             console.log(`No subscription found for ${data.receiver}`);
             return;
           }
@@ -84,12 +83,13 @@ functions.cloudEvent('receiveNotification', (cloudevent) => {
               console.log(`Notification with id ${data.id} has been sent already.`);
               return;
             }
-  
-            webpush.sendNotification(JSON.parse(pso.push_subscription_object), JSON.stringify(data)).then(res => {
-              console.log(`Notification with id ${data.id} has been sent.`)
-              insertNotification(pool, data).then(() => console.log(`Notification with id ${data.id} saved successfuly`));
-            });
-          })
+            insertNotification(pool, data).then(() => console.log(`Notification with id ${data.id} saved successfuly`));
+            subscriptions.forEach((subscription) => {
+              webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data)).then(res => {
+                console.log(`Notification with id ${data.id} has been sent.`)
+              });
+            });            
+          });
         });
     });
 });
