@@ -8,6 +8,8 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY || "f1qlHM-Wsq9m6Z_WwQPPGL4zHyS2fKCoZFXOu2n5Dao"
 );
 
+// allowed types of notifications
+const ALLOWED_VALUE_TYPES = process.env.ALLOWED_VALUE_TYPES || [];
 
 // For local testing
 // const DB_USER = "postgres";
@@ -70,12 +72,19 @@ const getSubscriptions = async (pool, accountId) => {
   };
 
 functions.cloudEvent('receiveNotification', (cloudevent) => {
-    createTcpPool().then((pool) => {
-        const data = JSON.parse(atob(cloudevent.data.message.data));
+    const data = JSON.parse(atob(cloudevent.data.message.data));
 
+    if (ALLOWED_VALUE_TYPES.length > 0) {
+      if (ALLOWED_VALUE_TYPES.indexOf(data.valueType) === -1) {
+        console.log(`Notification ${data.id} dropped due to unallowed type: ${data.valueType}.`);
+        return;
+      }
+    }
+
+    createTcpPool().then((pool) => {
         getSubscriptions(pool, data.receiver).then((subscriptions) => {
           if (!subscriptions || subscriptions.length === 0) {
-            console.log(`No subscription found for ${data.receiver}`);
+            console.log(`No subscription found for ${data.receiver}.`);
             return;
           }
           getNotification(pool, data.id).then((id) => {
@@ -83,7 +92,7 @@ functions.cloudEvent('receiveNotification', (cloudevent) => {
               console.log(`Notification with id ${data.id} has been sent already.`);
               return;
             }
-            insertNotification(pool, data).then(() => console.log(`Notification with id ${data.id} saved successfuly`));
+            insertNotification(pool, data).then(() => console.log(`Notification with id ${data.id} saved successfuly.`));
             subscriptions.forEach((subscription) => {
               webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data)).then(res => {
                 console.log(`Notification with id ${data.id} has been sent.`)
