@@ -110,8 +110,8 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
   }
 
   subscriptions.forEach((subscription) => {
-    // webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data)).then(res => {
-    //   console.log(`Notification with id ${data.id} has been sent.`)
-    // });
+    webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data)).then(res => {
+      console.log(`Notification with id ${data.id} has been sent.`)
+    });
   });
 });
