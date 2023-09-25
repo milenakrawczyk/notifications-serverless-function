@@ -61,7 +61,7 @@ const insertNotification = async (pool, notification) => {
 const getSubscriptions = async (pool, accountId) => {
   try {
     return await pool("Subscription")
-      .select("push_subscription_object")
+      .select("push_subscription_object", "endpoint")
       .where("account", accountId);
   } catch (err) {
     throw Error(err);
@@ -71,6 +71,16 @@ const getSubscriptions = async (pool, accountId) => {
 const getNotification = async (pool, id) => {
   try {
     return await pool("Notification").select("*").where("id", id).first();
+  } catch (err) {
+    throw Error(err);
+  }
+};
+
+const deleteSubscription = async (pool, endpoint) => {
+  try {
+    return await pool("Subscription")
+      .where("endpoint", endpoint)
+      .del();
   } catch (err) {
     throw Error(err);
   }
@@ -92,26 +102,41 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
   let subscriptions;
   try {
     subscriptions = await getSubscriptions(pool, data.receiver);
+
     if (!subscriptions || subscriptions.length === 0) {
-      console.log(`No subscription found for ${data.receiver}.`);
+      console.log(`No subscription found for ${data.receiver}, notificationId: ${data.id}.`);
       return;
     }
     const id = await getNotification(pool, data.id);
     if (id) {
-      console.log(`Notification with id ${data.id} has been sent already.`);
+      console.log(`Notification with id ${data.id} has been sent already to ${data.receiver}.`);
       return;
     }
     await insertNotification(pool, data);
-    console.log(`Notification with id ${data.id} saved successfuly.`);
+    console.log(`Notification with id ${data.id} saved successfuly, receiver: ${data.receiver}.`);
+  
+    for (const subscription of subscriptions) {
+      try {
+        await webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data));
+        console.log(`Notification with id ${data.id} has been sent to receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`)
+      } catch(e) {
+        console.error(`Error sending notification with id ${data.id} to receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`);
+        switch (e.statusCode) {
+          case 400: // bad parameters
+          case 404: // endpoint not found
+          case 410: // invalid endpoint
+            // deleting subscription
+            console.log(`Deleting invalid subscription of receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`);
+            await deleteSubscription(pool, subscription.endpoint);
+            return;
+          default:
+            throw e;
+        }
+      };
+    };
   } catch (e) {
     throw e;
   } finally {
     await pool.destroy();
   }
-
-  subscriptions.forEach((subscription) => {
-    webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data)).then(res => {
-      console.log(`Notification with id ${data.id} has been sent.`)
-    });
-  });
 });
