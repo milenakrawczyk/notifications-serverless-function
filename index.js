@@ -13,6 +13,9 @@ webpush.setVapidDetails(
 // allowed types of notifications
 const ALLOWED_VALUE_TYPES = process.env.ALLOWED_VALUE_TYPES || [];
 
+// max number of notifications per day
+const MAX_NOTIFICATIONS_PER_DAY = process.env.MAX_NOTIFICATIONS_PER_DAY || 15;
+
 // For local testing
 // const DB_USER = "postgres";
 // const DB_PASS = "postgres";
@@ -86,6 +89,18 @@ const deleteSubscription = async (pool, endpoint) => {
   }
 };
 
+const getPastNotifications = async (pool, accountId) => {
+  try {
+    const dayAgo = new Date(new Date().getTime() - (24 * 60 * 60 * 1000)).toISOString();
+    return await pool("Notification")
+      .select("id")
+      .where("receiver", accountId)
+      .where('sent_at', '>=', dayAgo);
+  } catch (err) {
+    throw Error(err);
+  }
+};
+
 functions.cloudEvent("receiveNotification", async (cloudevent) => {
   const data = JSON.parse(atob(cloudevent.data.message.data));
 
@@ -112,6 +127,12 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
       console.log(`Notification with id ${data.id} has been sent already to ${data.receiver}.`);
       return;
     }
+    const pastNotifications = await getPastNotifications(pool, data.receiver);
+    if (pastNotifications.length > MAX_NOTIFICATIONS_PER_DAY) {
+      console.log(`Notification with id ${data.id} has been dropped for ${data.receiver} because the daily limit has been reached.`);
+      return;
+    }
+
     await insertNotification(pool, data);
     console.log(`Notification with id ${data.id} saved successfuly, receiver: ${data.receiver}.`);
   
@@ -130,6 +151,7 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
             await deleteSubscription(pool, subscription.endpoint);
             return;
           default:
+            console.error(`Error sending notification with id ${data?.id} to ${data?.receiver}, endpoint: ${subscription?.endpoint}.`)
             throw e;
         }
       };
