@@ -151,7 +151,7 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
             await deleteSubscription(pool, subscription.endpoint);
             return;
           default:
-            console.error(`Error sending notification with id ${data.id} to ${data.receiver}, endpoint: ${subscription.endpoint}.`)
+            console.error(`Error sending notification with id ${data?.id} to ${data?.receiver}, endpoint: ${subscription?.endpoint}.`)
             throw e;
         }
       };
