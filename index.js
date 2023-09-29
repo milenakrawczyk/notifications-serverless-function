@@ -147,11 +147,11 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
           case 404: // endpoint not found
           case 410: // invalid endpoint
             // deleting subscription
-            console.log(`Deleting invalid subscription of receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`);
-            await deleteSubscription(pool, subscription.endpoint);
+            console.log(`[Virtual] Error (code ${e.statusCode}). Deleting invalid subscription of receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`, e);
+            // await deleteSubscription(pool, subscription.endpoint);
             return;
           default:
-            console.error(`Error sending notification with id ${data?.id} to ${data?.receiver}, endpoint: ${subscription?.endpoint}.`)
+            console.error(`Error (code ${e.statusCode}) sending notification with id ${data?.id} to ${data?.receiver}, endpoint: ${subscription?.endpoint}.`, e);
             throw e;
         }
       };
