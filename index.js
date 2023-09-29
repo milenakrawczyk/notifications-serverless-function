@@ -43,7 +43,7 @@ const createTcpPool = async () => {
   });
 };
 
-const insertNotification = async (pool, notification) => {
+const insertNotification = async (pool, notification, endpoint, gateway) => {
   try {
     return await pool("Notification").insert({
       id: notification.id,
@@ -54,6 +54,8 @@ const insertNotification = async (pool, notification) => {
       path: notification.path,
       receiver: notification.receiver,
       value_type: notification.valueType,
+      endpoint,
+      gateway,
       sent_at: new Date(),
     });
   } catch (err) {
@@ -64,7 +66,7 @@ const insertNotification = async (pool, notification) => {
 const getSubscriptions = async (pool, accountId) => {
   try {
     return await pool("Subscription")
-      .select("push_subscription_object", "endpoint")
+      .select("push_subscription_object", "endpoint", "gateway")
       .where("account", accountId);
   } catch (err) {
     throw Error(err);
@@ -89,12 +91,13 @@ const deleteSubscription = async (pool, endpoint) => {
   }
 };
 
-const getPastNotifications = async (pool, accountId) => {
+const getPastNotifications = async (pool, accountId, endpoint) => {
   try {
     const dayAgo = new Date(new Date().getTime() - (24 * 60 * 60 * 1000)).toISOString();
     return await pool("Notification")
       .select("id")
       .where("receiver", accountId)
+      .where("endpoint", endpoint)
       .where('sent_at', '>=', dayAgo);
   } catch (err) {
     throw Error(err);
@@ -122,24 +125,23 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
       console.log(`No subscription found for ${data.receiver}, notificationId: ${data.id}.`);
       return;
     }
-    const id = await getNotification(pool, data.id);
-    if (id) {
-      console.log(`Notification with id ${data.id} has been sent already to ${data.receiver}.`);
-      return;
-    }
-    const pastNotifications = await getPastNotifications(pool, data.receiver);
-    if (pastNotifications.length > MAX_NOTIFICATIONS_PER_DAY) {
-      console.log(`Notification with id ${data.id} has been dropped for ${data.receiver} because the daily limit has been reached.`);
-      return;
-    }
-
-    await insertNotification(pool, data);
-    console.log(`Notification with id ${data.id} saved successfuly, receiver: ${data.receiver}.`);
   
     for (const subscription of subscriptions) {
+      const id = await getNotification(pool, data.id, subscription.endpoint);
+      if (id) {
+        console.log(`Notification with id ${data.id} has been sent already to ${data.receiver}, endpoint: ${subscription.endpoint}.`);
+        continue;
+      }
+      const pastNotifications = await getPastNotifications(pool, data.receiver, subscription.endpoint);
+      if (pastNotifications.length > MAX_NOTIFICATIONS_PER_DAY) {
+        console.log(`Notification with id ${data.id} has been dropped for ${data.receiver}, endpoint: ${subscription.endpoint} because the daily limit has been reached.`);
+        continue;
+      }
       try {
         await webpush.sendNotification(JSON.parse(subscription.push_subscription_object), JSON.stringify(data));
         console.log(`Notification with id ${data.id} has been sent to receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`)
+        await insertNotification(pool, data, subscription.endpoint, subscription.gateway);
+        console.log(`Notification with id ${data.id} saved successfuly, receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`);
       } catch(e) {
         console.error(`Error sending notification with id ${data.id} to receiver: ${data.receiver}, endpoint: ${subscription.endpoint}.`);
         switch (e.statusCode) {
