@@ -73,9 +73,9 @@ const getSubscriptions = async (pool, accountId) => {
   }
 };
 
-const getNotification = async (pool, id) => {
+const getNotification = async (pool, id, endpoint) => {
   try {
-    return await pool("Notification").select("*").where("id", id).first();
+    return await pool("Notification").select("*").where("id", id).where("endpoint", endpoint).first();
   } catch (err) {
     throw Error(err);
   }
