@@ -104,6 +104,18 @@ const getPastNotifications = async (pool, accountId, endpoint) => {
   }
 };
 
+const getUserPreferences = async (pool, receiver, valueType) => {
+  try {
+    return await pool("Preference")
+      .select("id")
+      .where("account", receiver)
+      .where("dapp", valueType)
+      .where("block", true);
+  } catch (err) {
+    throw Error(err);
+  }
+};
+
 functions.cloudEvent("receiveNotification", async (cloudevent) => {
   const data = JSON.parse(atob(cloudevent.data.message.data));
 
@@ -123,6 +135,12 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
 
     if (!subscriptions || subscriptions.length === 0) {
       console.log(`No subscription found for ${data.receiver}, notificationId: ${data.id}.`);
+      return;
+    }
+
+    const blockPreferences = await getUserPreferences(pool, data.receiver, data.valueType);
+    if (blockPreferences && blockPreferences.length > 0) {
+      console.log(`Notification with value type ${data.valueType} has been blocked by the account: ${data.receiver}, notificationId: ${data.id}. Notification has been dropped.`);
       return;
     }
   
