@@ -120,7 +120,7 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
   const data = JSON.parse(atob(cloudevent.data.message.data));
 
   if (ALLOWED_VALUE_TYPES.length > 0) {
-    if (ALLOWED_VALUE_TYPES.indexOf(data.valueType) === -1) {
+    if (data.valueType && ALLOWED_VALUE_TYPES.indexOf(data.valueType) === -1) {
       console.log(
         `Notification ${data.id} dropped due to unallowed type: ${data.valueType}.`,
       );
@@ -138,10 +138,12 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
       return;
     }
 
-    const blockPreferences = await getUserPreferences(pool, data.receiver, data.valueType);
-    if (blockPreferences && blockPreferences.length > 0) {
-      console.log(`Notification with value type ${data.valueType} has been blocked by the account: ${data.receiver}, notificationId: ${data.id}. Notification has been dropped.`);
-      return;
+    if (data.valueType) {
+      const blockPreferences = await getUserPreferences(pool, data.receiver, data.valueType);
+      if (blockPreferences && blockPreferences.length > 0) {
+        console.log(`Notification with value type ${data.valueType} has been blocked by the account: ${data.receiver}, notificationId: ${data.id}. Notification has been dropped.`);
+        return;
+      }
     }
   
     for (const subscription of subscriptions) {
