@@ -104,11 +104,23 @@ const getPastNotifications = async (pool, accountId, endpoint) => {
   }
 };
 
+const getUserPreferences = async (pool, receiver, valueType) => {
+  try {
+    return await pool("Preference")
+      .select("id")
+      .where("account", receiver)
+      .where("dapp", valueType)
+      .where("block", true);
+  } catch (err) {
+    throw Error(err);
+  }
+};
+
 functions.cloudEvent("receiveNotification", async (cloudevent) => {
   const data = JSON.parse(atob(cloudevent.data.message.data));
 
   if (ALLOWED_VALUE_TYPES.length > 0) {
-    if (ALLOWED_VALUE_TYPES.indexOf(data.valueType) === -1) {
+    if (data.valueType && ALLOWED_VALUE_TYPES.indexOf(data.valueType) === -1) {
       console.log(
         `Notification ${data.id} dropped due to unallowed type: ${data.valueType}.`,
       );
@@ -124,6 +136,14 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
     if (!subscriptions || subscriptions.length === 0) {
       console.log(`No subscription found for ${data.receiver}, notificationId: ${data.id}.`);
       return;
+    }
+
+    if (data.valueType) {
+      const blockPreferences = await getUserPreferences(pool, data.receiver, data.valueType);
+      if (blockPreferences && blockPreferences.length > 0) {
+        console.log(`Notification with value type ${data.valueType} has been blocked by the account: ${data.receiver}, notificationId: ${data.id}. Notification has been dropped.`);
+        return;
+      }
     }
   
     for (const subscription of subscriptions) {
