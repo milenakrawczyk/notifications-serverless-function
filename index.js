@@ -1,27 +1,43 @@
+require('dotenv').config();
 const functions = require("@google-cloud/functions-framework");
 const webpush = require("web-push");
 const Knex = require("knex");
 
+if (
+  !process.env.VAPID_SUBJECT ||
+  !process.env.VAPID_PUBLIC_KEY ||
+  !process.env.VAPID_PRIVATE_KEY
+) {
+  throw new Error(
+    "VAPID_SUBJECT, VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set in the environment. Check '.env.example' file.",
+  );
+}
+
 webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || "mailto:milena@near.org",
-  process.env.VAPID_PUBLIC_KEY ||
-    "BCZN5uqYMBZ2VCV3y0F0emodyYRGyt5JTgfIIzYVXIHKSBwuG0kb0NpPA-DM4nfmfRFiFu-MpKS2eNG7bhxQWn0",
-  process.env.VAPID_PRIVATE_KEY ||
-    "f1qlHM-Wsq9m6Z_WwQPPGL4zHyS2fKCoZFXOu2n5Dao",
+  process.env.VAPID_SUBJECT,
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
 );
 
 // allowed types of notifications
-const ALLOWED_VALUE_TYPES = process.env.ALLOWED_VALUE_TYPES || [];
+const ALLOWED_VALUE_TYPES = process.env.ALLOWED_VALUE_TYPES.length > 0
+  ? process.env.ALLOWED_VALUE_TYPES.split(",")
+  : [];
 
 // max number of notifications per day
 const MAX_NOTIFICATIONS_PER_DAY = process.env.MAX_NOTIFICATIONS_PER_DAY || 15;
 
-// For local testing
-// const DB_USER = "postgres";
-// const DB_PASS = "postgres";
-// const DB_NAME = "notifications-db";
-// const INSTANCE_HOST = "localhost";
-// const DB_PORT = 8087;
+if (
+  !process.env.DB_USER ||
+  !process.env.DB_PASS ||
+  !process.env.DB_NAME ||
+  !process.env.INSTANCE_HOST ||
+  !process.env.DB_PORT
+) {
+  throw new Error(
+    "DB_USER, DB_PASS, DB_NAME, INSTANCE_HOST and DB_PORT must be set in the environment. Check '.env.example' file.",
+  );
+}
 
 const createTcpPool = async () => {
   const config = { pool: {} };
@@ -33,11 +49,11 @@ const createTcpPool = async () => {
   return Knex({
     client: "pg",
     connection: {
-      user: process.env.DB_USER || DB_USER,
-      password: process.env.DB_PASS || DB_PASS,
-      database: process.env.DB_NAME || DB_NAME,
-      host: process.env.INSTANCE_HOST || INSTANCE_HOST,
-      port: process.env.DB_PORT || DB_PORT,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS,
+      database: process.env.DB_NAME,
+      host: process.env.INSTANCE_HOST,
+      port: process.env.DB_PORT,
     },
     ...config,
   });
@@ -59,6 +75,7 @@ const insertNotification = async (pool, notification, endpoint, gateway) => {
       sent_at: new Date(),
     });
   } catch (err) {
+    console.error("Error inserting notification: ");
     throw Error(err);
   }
 };
@@ -69,6 +86,7 @@ const getSubscriptions = async (pool, accountId) => {
       .select("push_subscription_object", "endpoint", "gateway")
       .where("account", accountId);
   } catch (err) {
+    console.error("Error getting subscriptions: ");
     throw Error(err);
   }
 };
@@ -77,6 +95,7 @@ const getNotification = async (pool, id, endpoint) => {
   try {
     return await pool("Notification").select("*").where("id", id).where("endpoint", endpoint).first();
   } catch (err) {
+    console.error("Error getting notification:");
     throw Error(err);
   }
 };
@@ -100,6 +119,7 @@ const getPastNotifications = async (pool, accountId, endpoint) => {
       .where("endpoint", endpoint)
       .where('sent_at', '>=', dayAgo);
   } catch (err) {
+    console.error("Error getting past notifications: ");
     throw Error(err);
   }
 };
@@ -112,6 +132,7 @@ const getUserPreferences = async (pool, receiver, valueType) => {
       .where("dapp", valueType)
       .where("block", true);
   } catch (err) {
+    console.error("Error getting user preferences: ");
     throw Error(err);
   }
 };
@@ -145,7 +166,7 @@ functions.cloudEvent("receiveNotification", async (cloudevent) => {
         return;
       }
     }
-  
+
     for (const subscription of subscriptions) {
       const id = await getNotification(pool, data.id, subscription.endpoint);
       if (id) {
